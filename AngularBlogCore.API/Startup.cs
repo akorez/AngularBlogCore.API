@@ -32,7 +32,7 @@ namespace AngularBlogCore.API
             {
                 opt.AddDefaultPolicy(x =>
                 {
-                    x.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+                    x.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
                 });
             });
 
