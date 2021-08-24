@@ -25,6 +25,8 @@ namespace AngularBlogCore.API.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Category>>> GetCategories()
         {
+            System.Threading.Thread.Sleep(3000);
+
             return await _context.Categories.ToListAsync();
         }
 
