@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using AngularBlogCore.API.Models;
 using AngularBlogCore.API.Responses;
 using System.Globalization;
+using System.IO;
 
 namespace AngularBlogCore.API.Controllers
 {
@@ -24,9 +25,20 @@ namespace AngularBlogCore.API.Controllers
 
         // GET: api/Articles
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Article>>> GetArticles()
+        public IActionResult GetArticles()
         {
-            return await _context.Articles.ToListAsync();
+            var articles = _context.Articles.Include(a => a.Category).Include(b => b.Comments).OrderByDescending(x => x.PublishDate).ToList().Select(y => new ArticleResponse
+            {
+                Id = y.Id,
+                Title = y.Title,
+                Picture = y.Picture,
+                Category = new CategoryResponse() { Id = y.CategoryId, Name = y.Category.Name },
+                CommentCount = y.Comments.Count,
+                ViewCount = y.ViewCount,
+                PublishDate = y.PublishDate
+            });
+
+            return Ok(articles);
         }
 
         [HttpGet("{page}/{pageSize}")]
@@ -103,10 +115,10 @@ namespace AngularBlogCore.API.Controllers
 
         [Route("GetSearchArticle/{searchText}/{page}/{pageSize}")]
         [HttpGet]
-        public IActionResult SearchArticle(string searchText,int page = 1, int pageSize = 5)
+        public IActionResult SearchArticle(string searchText, int page = 1, int pageSize = 5)
         {
             IQueryable<Article> query;
-            query = _context.Articles.Include(x=>x.Category).Include(y=>y.Comments).Where(z=>z.Title.Contains(searchText))
+            query = _context.Articles.Include(x => x.Category).Include(y => y.Comments).Where(z => z.Title.Contains(searchText))
                 .OrderByDescending(x => x.PublishDate);
 
             var queryResult = ArticlePagination(query, page, pageSize);
@@ -121,7 +133,7 @@ namespace AngularBlogCore.API.Controllers
         }
 
         [Route("GetArticlesByMostView")]
-        [HttpGet]        
+        [HttpGet]
         public IActionResult GetArticlesByMostView()
         {
             System.Threading.Thread.Sleep(2000);
@@ -134,9 +146,9 @@ namespace AngularBlogCore.API.Controllers
 
             return Ok(articles);
         }
-        
+
         [Route("GetArticlesArchive")]
-        [HttpGet]        
+        [HttpGet]
         public IActionResult GetArticlesArchive()
         {
             System.Threading.Thread.Sleep(1000);
@@ -147,15 +159,15 @@ namespace AngularBlogCore.API.Controllers
                     year = y.Key.Year,
                     month = y.Key.Month,
                     count = y.Count(),
-                    monthName = new DateTime(y.Key.Year,y.Key.Month,1).ToString("MMMM")
-                }); 
+                    monthName = new DateTime(y.Key.Year, y.Key.Month, 1).ToString("MMMM")
+                });
 
             return Ok(query);
         }
 
         [Route("GetArticleArchiveList/{year}/{month}/{page}/{pageSize}")]
         [HttpGet]
-        public IActionResult GetArticleArchiveList(int year,int month,int page,int pageSize)
+        public IActionResult GetArticleArchiveList(int year, int month, int page, int pageSize)
         {
             System.Threading.Thread.Sleep(1700);
 
@@ -207,12 +219,13 @@ namespace AngularBlogCore.API.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> PutArticle(int id, Article article)
         {
-            if (id != article.Id)
-            {
-                return BadRequest();
-            }
+            var oldArticle = _context.Articles.Find(id);
+            oldArticle.Title = article.Title;
+            oldArticle.ContentMain = article.ContentMain;
+            oldArticle.ContentSummary = article.ContentSummary;
+            oldArticle.CategoryId = article.Category.Id;
+            oldArticle.Picture = article.Picture;
 
-            _context.Entry(article).State = EntityState.Modified;
 
             try
             {
@@ -236,12 +249,21 @@ namespace AngularBlogCore.API.Controllers
         // POST: api/Articles
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<Article>> PostArticle(Article article)
+        public async Task<IActionResult> PostArticle(Article article)
         {
+            if (article.Category != null)
+            {
+                article.CategoryId = article.Category.Id;
+            }
+
+            article.Category = null;
+            article.ViewCount = 0;
+            article.PublishDate = DateTime.Now;
+
             _context.Articles.Add(article);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction("GetArticle", new { id = article.Id }, article);
+            return Ok(); // CreatedAtAction("GetArticle", new { id = article.Id });
         }
 
         // DELETE: api/Articles/5
@@ -288,7 +310,7 @@ namespace AngularBlogCore.API.Controllers
 
         [Route("ArticleViewCountUp/{id}")]
         [HttpGet]
-        public IActionResult ArticleViewCountUp (int id)
+        public IActionResult ArticleViewCountUp(int id)
         {
             var article = _context.Articles.Find(id);
 
@@ -297,6 +319,26 @@ namespace AngularBlogCore.API.Controllers
             _context.SaveChanges();
 
             return Ok();
+        }
+
+        [Route("SaveArticlePicture")]
+        [HttpPost]
+        public async Task<IActionResult> SaveArticlePicture(IFormFile picture)
+        {
+            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(picture.FileName);
+
+            var path = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/articlePictures", fileName);
+
+            using (var stream = new FileStream(path, FileMode.Create))
+            {
+                await picture.CopyToAsync(stream);
+            };
+            var result = new
+            {
+                path = "https://" + Request.Host + "/articlePictures/" + fileName
+            };
+
+            return Ok(result);
         }
     }
 }
